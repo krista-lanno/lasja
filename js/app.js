@@ -2,7 +2,7 @@
   'use strict';
 
   const STORE_KEY = 'fkt-progress-v1';
-  const FILTER_KEY = 'fkt-filters-v1';
+  const FILTER_KEY = 'fkt-filters-v2';
   const $ = s => document.querySelector(s);
 
   /* ---------- Salvestus ---------- */
@@ -21,31 +21,41 @@
   }
   function persist() { save(STORE_KEY, progress); renderStats(); renderList(); }
 
-  const filters = Object.assign({ blocks: [1, 2, 3, 4, 5, 6, 7], kinds: ['T', 'K', 'S'], status: 'all', random: true }, load(FILTER_KEY, {}));
+  const ALLBLOCKS = Object.keys(BLOCKS).map(Number);
+  const filters = Object.assign({ kt: 2, blocks: ALLBLOCKS.slice(), kinds: ['T', 'K', 'S', 'V'], status: 'all', random: true }, load(FILTER_KEY, {}));
+  if (!KTS[filters.kt]) filters.kt = 2;
+  // uued teemad, mida salvestatud filtris veel polnud, lülitame sisse
+  ALLBLOCKS.forEach(b => { if (!(filters.seen || []).includes(b) && !filters.blocks.includes(b)) filters.blocks.push(b); });
+  filters.seen = ALLBLOCKS.slice();
+  Object.keys(KINDS).forEach(k => { if (!(filters.seenKinds || ['T', 'K', 'S']).includes(k) && !filters.kinds.includes(k)) filters.kinds.push(k); });
+  filters.seenKinds = Object.keys(KINDS);
 
   /* ---------- Andmed ---------- */
   const ALL = window.PROBLEMS;
   const byId = {};
-  ALL.forEach(p => { byId[p.id] = p; });
+  ALL.forEach(p => { byId[p.uid] = p; });
+  const ktBlocks = () => KTS[filters.kt].blocks;
+  const inKt = () => ALL.filter(p => p.kt === filters.kt);
 
-  function numKey(p) { const m = /^(\d+)(?:\((\d)\))?/.exec(p.id); return m ? (+m[1]) * 10 + (+(m[2] || 0)) : 0; }
+  function numKey(p) { const m = /^(\d+)(?:\((\d)\))?([a-c])?/.exec(p.id); return m ? (+m[1]) * 10 + (+(m[2] || 0)) + (m[3] ? m[3].charCodeAt(0) - 96 : 0) : 0; }
 
   function filtered() {
     return ALL.filter(p => {
+      if (p.kt !== filters.kt) return false;
       if (!filters.blocks.includes(p.b)) return false;
       if (!filters.kinds.includes(p.k)) return false;
-      const s = progress[p.id];
+      const s = progress[p.uid];
       if (filters.status === 'todo' && s && s.done) return false;
       if (filters.status === 'wrong' && !(s && s.mistakes > 0)) return false;
       return true;
-    }).sort((a, b) => numKey(a) - numKey(b));
+    }).sort((a, b) => (a.b - b.b) || (numKey(a) - numKey(b)));
   }
 
   let queue = [];
   let currentId = null;
 
   function rebuildQueue() {
-    const f = filtered().map(p => p.id);
+    const f = filtered().map(p => p.uid);
     queue = filters.random ? shuffle(f) : f;
   }
 
@@ -67,7 +77,7 @@
   function computeStats(list) {
     let done = 0, first = 0, att = 0;
     list.forEach(p => {
-      const s = progress[p.id];
+      const s = progress[p.uid];
       if (!s) return;
       if (s.done) done++;
       Object.values(s.steps).forEach(st => { if (st.tries > 0 || st.revealed) { att++; if (st.first) first++; } });
@@ -76,7 +86,7 @@
   }
 
   function renderStats() {
-    const s = computeStats(ALL);
+    const s = computeStats(inKt());
     $('#stats').innerHTML =
       `<span class="stat"><b>${s.done}</b>/${s.total} lahendatud</span>` +
       `<span class="stat">${s.pct === null ? '–' : s.pct + '%'} samme esimesel katsel õigesti</span>`;
@@ -94,8 +104,9 @@
   }
 
   function renderFilters() {
+    renderKt();
     const fb = $('#fBlocks'); fb.innerHTML = '';
-    Object.keys(BLOCKS).forEach(k => {
+    ktBlocks().forEach(k => {
       const n = +k;
       fb.appendChild(chip(n + '. ' + BLOCKS[k], filters.blocks.includes(n), () => {
         toggle(filters.blocks, n); onFilter();
@@ -104,7 +115,7 @@
     const fk = $('#fKinds'); fk.innerHTML = '';
     Object.keys(KINDS).forEach(k => {
       fk.appendChild(chip(KINDS[k], filters.kinds.includes(k), () => { toggle(filters.kinds, k); onFilter(); },
-        k === 'S' ? 'Kogust leitud sarnased ülesanded (lisaharjutus)' : ''));
+        k === 'S' ? 'Kogust leitud sarnased ülesanded (lisaharjutus)' : k === 'V' ? 'Kontrolltöö variantide ülesanded' : ''));
     });
     const fs = $('#fStatus'); fs.innerHTML = '';
     [['all', 'Kõik'], ['todo', 'Lahendamata'], ['wrong', 'Kus eksisin']].forEach(([k, l]) => {
@@ -114,7 +125,27 @@
   }
   function toggle(arr, v) {
     const i = arr.indexOf(v);
-    if (i >= 0) { if (arr.length > 1) arr.splice(i, 1); } else arr.push(v);
+    const mine = ktBlocks().includes(v) ? arr.filter(x => ktBlocks().includes(x)) : arr;
+    if (i >= 0) { if (mine.length > 1) arr.splice(i, 1); } else arr.push(v);
+  }
+  function renderKt() {
+    const box = $('#ktSwitch');
+    if (!box) return;
+    box.innerHTML = '';
+    Object.keys(KTS).forEach(k => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ktbtn' + (+k === filters.kt ? ' on' : '');
+      b.innerHTML = `<b>${KTS[k].short}</b><span>${KTS[k].name}</span>`;
+      b.setAttribute('aria-pressed', +k === filters.kt);
+      b.addEventListener('click', () => {
+        if (+k === filters.kt) return;
+        filters.kt = +k; save(FILTER_KEY, filters);
+        renderFilters(); rebuildQueue(); renderStats(); renderHome();
+      });
+      box.appendChild(b);
+    });
+    $('.brand-sub').textContent = KTS[filters.kt].sub;
   }
   function onFilter() {
     save(FILTER_KEY, filters);
@@ -135,12 +166,12 @@
         ol.appendChild(h);
       }
       const li = document.createElement('li');
-      const s = progress[p.id];
+      const s = progress[p.uid];
       const st = s && s.done ? (s.mistakes ? 'part' : 'ok') : (s && Object.keys(s.steps).length ? 'started' : '');
-      li.innerHTML = `<button type="button" class="pitem ${p.id === currentId ? 'cur' : ''}">
-        <span class="dot ${st}"></span><span class="pnr">${p.id}</span>
+      li.innerHTML = `<button type="button" class="pitem ${p.uid === currentId ? 'cur' : ''}">
+        <span class="dot ${st}"></span><span class="pnr">${p.short || p.id}</span>
         <span class="pk k${p.k}">${KINDS[p.k]}</span></button>`;
-      li.firstChild.addEventListener('click', () => { openProblem(p.id); closeSidebar(); });
+      li.firstChild.addEventListener('click', () => { openProblem(p.uid); closeSidebar(); });
       ol.appendChild(li);
     });
   }
@@ -149,17 +180,23 @@
   function renderHome() {
     currentId = null;
     const main = $('#main');
-    const rows = Object.keys(BLOCKS).map(k => {
+    const kt = filters.kt;
+    const rows = ktBlocks().map(k => {
       const list = ALL.filter(p => p.b === +k);
       const s = computeStats(list);
-      const pct = Math.round(100 * s.done / list.length);
+      const pct = list.length ? Math.round(100 * s.done / list.length) : 0;
       return `<div class="trow"><span>${k}. ${BLOCKS[k]}</span>
         <span class="bar"><span style="width:${pct}%"></span></span><span class="small muted">${s.done}/${list.length}</span></div>`;
     }).join('');
+    const intro = kt === 1
+      ? `<p>Siin on kõik tunnis ja kodus lahendatud ülesanded kogust „Füüs. ül. kogu I“ ning lisaks samast kogust leitud sarnased ülesanded.
+      Iga ülesanne on jaotatud sammudeks: vali valem, avalda suurus, arvuta vahetulemus, joonesta jõud. Vihje saad igal sammul, terve lahendus avaneb alles siis, kui ise küsid.</p>`
+      : `<p>Teine kontrolltöö: ideaalne gaas ja termodünaamika (kogu I, nädal 8), elektrostaatika ja alalisvool (kogu II). Kõik tunnis ja kodus lahendatud ülesanded ning kogust leitud sarnased ülesanded.
+      Iga ülesanne on sammudeks jaotatud. Paljudes ülesannetes on 🎬 visuaalne selgitus: liikuvad molekulid, väljajooned, voolav vool skeemis. Neid saab liigutada ja peatada.</p>
+      <div class="homeviz">${window.HOMEVIZ || ''}</div>`;
     main.innerHTML = `<section class="card home">
-      <h1>Kontrolltöö kordamine</h1>
-      <p>Siin on kõik tunnis ja kodus lahendatud ülesanded kogust „Füüs. ül. kogu I“ ning lisaks samast kogust leitud sarnased ülesanded.
-      Iga ülesanne on jaotatud sammudeks: vali valem, avalda suurus, arvuta vahetulemus, joonesta jõud. Vihje saad igal sammul, terve lahendus avaneb alles siis, kui ise küsid.</p>
+      <h1>${KTS[kt].short} kordamine: ${KTS[kt].name.toLowerCase()}</h1>
+      ${intro}
       <ul class="howto">
         <li>Arvu võid kirjutada komaga või punktiga, astmega kujul <code>4,2e5</code> või <code>4,2*10^5</code>. Võid ka arvutuse sisse kirjutada, nt <code>2*9,8*3</code>.</li>
         <li>Vastust aktsepteeritakse umbes 3% täpsusega, seega ümardamine ja g = 9,8 või 9,81 ei lähe arvesse.</li>
@@ -169,6 +206,7 @@
       <div class="actions"><button class="btn primary" id="btnStart">Alusta (${filtered().length} ülesannet)</button></div>
     </section>`;
     $('#btnStart').addEventListener('click', () => { rebuildQueue(); const id = nextId() || queue[0]; if (id) openProblem(id); });
+    if (window.Viz) Viz.mount(main);
     renderList();
   }
 
@@ -178,6 +216,7 @@
   function openProblem(id) {
     const p = byId[id];
     if (!p) return;
+    if (p.kt !== filters.kt) { filters.kt = p.kt; save(FILTER_KEY, filters); renderFilters(); renderStats(); }
     currentId = id;
     if (!queue.includes(id)) rebuildQueue();
     view = { p, stepIdx: 0, solArmed: false, anyTry: false };
@@ -186,14 +225,16 @@
     const doneBadge = s && s.done ? `<span class="badge ok">lahendatud${s.mistakes ? '' : ' vigadeta'}</span>` : '';
     main.innerHTML = `<article class="card pcard">
       <div class="phead">
-        <span class="pnum">Ülesanne ${p.id}</span>
+        <span class="pnum">${p.head || 'Ülesanne ' + p.id}</span>
         <span class="pk k${p.k}">${KINDS[p.k]}</span>
-        <span class="tag">${BLOCKS[p.b]}</span>
+        <span class="tag">${BLOCKS[p.b]}${p.kt === 2 && p.src ? ' · kogu ' + p.src : ''}</span>
         ${doneBadge}
       </div>
       <div class="ptext">${md(p.text)}</div>
       ${p.fig ? `<div class="pfig">${p.fig}</div>` : ''}
+      ${p.viz ? `<details class="pviz" open><summary>🎬 Visuaalne selgitus</summary>${p.viz}</details>` : ''}
       ${p.note ? `<div class="note">${md(p.note)}</div>` : ''}
+      ${p.formulas ? `<details class="given pform"><summary>Kasutatavad valemid</summary><div>${md(p.formulas)}</div></details>` : ''}
       ${p.given ? `<details class="given"><summary>Andmed ja mida leida</summary><div>${md(p.given)}</div></details>` : ''}
       <div class="steps" id="steps"></div>
       <div class="pactions">
@@ -207,6 +248,7 @@
     $('#btnRetry').addEventListener('click', () => openProblem(id));
     $('#btnSol').addEventListener('click', onSolution);
     renderStep(0);
+    if (window.Viz) Viz.mount(main);
     renderList();
     window.scrollTo({ top: 0 });
     main.focus && main.focus();
@@ -222,9 +264,11 @@
     }
     const sol = $('#solution');
     sol.hidden = false;
-    sol.innerHTML = `<h3>Lahenduskäik</h3>${md(view.p.sol)}${view.p.ans ? `<div class="answer"><b>Vastus.</b> ${md(view.p.ans)}</div>` : ''}${view.p.after ? `<div class="note">${md(view.p.after)}</div>` : ''}`;
+    sol.innerHTML = `<h3>Lahenduskäik</h3>${md(view.p.sol)}${view.p.ans ? `<div class="answer"><b>Vastus.</b> ${md(view.p.ans)}</div>` : ''}${view.p.after ? `<div class="note">${md(view.p.after)}</div>` : ''}${view.p.solviz && !view.solvizShown ? view.p.solviz : ''}`;
+    view.solvizShown = true;
+    if (window.Viz) Viz.mount(sol);
     btn.hidden = true;
-    const s = pr(view.p.id); s.sol = true; persist();
+    const s = pr(view.p.uid); s.sol = true; persist();
     sol.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -252,12 +296,12 @@
     const body = card.querySelector('.sbody');
     const fb = card.querySelector('.sfb');
     const ctl = STEP[st.type].render(body, st);
-    const rec = pr(p.id).steps[i] || { first: false, tries: 0, revealed: false, done: false };
+    const rec = pr(p.uid).steps[i] || { first: false, tries: 0, revealed: false, done: false };
     const local = { tries: 0, done: false };
 
     function complete(okFirst, revealed) {
       local.done = true;
-      const s = pr(p.id);
+      const s = pr(p.uid);
       const r = s.steps[i] = s.steps[i] || {};
       r.tries = local.tries;
       r.first = okFirst;
@@ -286,12 +330,13 @@
       if (res.ok) {
         fb.className = 'sfb good';
         fb.innerHTML = `<b>${res.msg || 'Õige!'}</b>${st.ex ? '<div class="ex">' + md(st.ex) + '</div>' : ''}`;
+        if (window.Viz) Viz.mount(fb);
         ctl.lock && ctl.lock();
         complete(local.tries === 1, false);
       } else {
         fb.className = 'sfb bad';
         fb.innerHTML = `<b>Pole veel õige.</b> ${res.msg || ''}<div class="small muted">Proovi uuesti${st.hint ? ', vaata vihjet' : ''} või ava vastus.</div>`;
-        const s = pr(p.id);
+        const s = pr(p.uid);
         s.steps[i] = Object.assign(s.steps[i] || {}, { tries: local.tries, first: false });
         persist();
       }
@@ -315,6 +360,7 @@
       ctl.reveal();
       fb.className = 'sfb info';
       fb.innerHTML = `<b>Õige vastus:</b> ${ctl.answerText ? md(ctl.answerText()) : ''}${st.ex ? '<div class="ex">' + md(st.ex) + '</div>' : ''}`;
+      if (window.Viz) Viz.mount(fb);
       complete(false, true);
     });
     if (i > 0) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -322,7 +368,7 @@
 
   function finish() {
     const p = view.p;
-    const s = pr(p.id);
+    const s = pr(p.uid);
     s.done = true;
     s.when = Date.now();
     persist();
@@ -332,8 +378,10 @@
     const d = document.createElement('div');
     d.className = 'finish';
     d.innerHTML = `<b>Ülesanne tehtud.</b> Esimesel katsel õigesti ${first}/${steps} sammu.
-      ${p.ans ? `<div class="answer">${md(p.ans)}</div>` : ''}${p.after ? `<div class="note">${md(p.after)}</div>` : ''}`;
+      ${p.ans ? `<div class="answer">${md(p.ans)}</div>` : ''}${p.after ? `<div class="note">${md(p.after)}</div>` : ''}${p.solviz && !view.solvizShown ? p.solviz : ''}`;
+    view.solvizShown = true;
     box.appendChild(d);
+    if (window.Viz) Viz.mount(d);
     d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     $('#btnNext').focus({ preventScroll: true });
   }
@@ -565,7 +613,7 @@
         },
         reveal() { fc.showAnswer(); },
         lock() { fc.lock(); },
-        answerText() { return 'õiged jõud on joonisel.'; }
+        answerText() { return 'õiged nooled on joonisel.'; }
       };
     }
   };
@@ -576,11 +624,16 @@
     d.hidden = false;
     const tabs = $('#drawerTabs');
     tabs.innerHTML = '';
-    const cur = b || (view ? view.p.b : 1);
-    Object.keys(BLOCKS).forEach(k => {
+    const kb = ktBlocks();
+    let cur = b || (view ? view.p.b : kb[0]);
+    if (!kb.includes(cur)) cur = kb[0];
+    kb.forEach(k => {
       tabs.appendChild(chip(k + '. ' + BLOCKS[k], +k === cur, () => openDrawer(+k)));
     });
-    $('#drawerBody').innerHTML = md((window.FORMULAS || {})[cur] || '') + md(window.SYMBOLS || '') + md(window.CONSTANTS || '');
+    const two = filters.kt === 2;
+    const body = $('#drawerBody');
+    body.innerHTML = md((window.FORMULAS || {})[cur] || '') + md((two ? window.SYMBOLS2 : window.SYMBOLS) || '') + md((two ? window.CONSTANTS2 : window.CONSTANTS) || '') + (two ? md(window.MATH2 || '') : '');
+    if (window.Viz) Viz.mount(body);
   }
 
   function closeSidebar() { document.body.classList.remove('side-open'); }

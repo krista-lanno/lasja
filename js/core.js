@@ -10,15 +10,35 @@ window.BLOCKS = {
   4: 'Jõud ja hõõrdejõud',
   5: 'Kaal, kesktõmme, gravitatsioon',
   6: 'Töö, võimsus, energia',
-  7: 'Impulss, jäävusseadused, põrge'
+  7: 'Impulss, jäävusseadused, põrge',
+  8: 'Ideaalse gaasi olekuvõrrand',
+  9: 'Siseenergia, töö, I seadus',
+  10: 'Coulombi seadus',
+  11: 'Elektrivälja tugevus ja potentsiaal',
+  12: 'Laengu liikumine, mahtuvus',
+  13: 'Tarbijate ühendusviisid',
+  14: 'Suletud vooluahelad',
+  15: 'KT2 variandid'
 };
 
-window.KINDS = { T: 'Tunnis', K: 'Kodus', S: 'Sarnane' };
+/* Kontrolltööd. Iga KT-l on oma teemad. */
+window.KTS = {
+  1: { short: 'KT1', name: 'Mehaanika', sub: 'Füüs. ül. kogu I · mehaanika', blocks: [1, 2, 3, 4, 5, 6, 7] },
+  2: { short: 'KT2', name: 'Gaasid ja elekter', sub: 'Kogu I ja II · termodünaamika, elektrostaatika, alalisvool', blocks: [8, 9, 10, 11, 12, 13, 14, 15] }
+};
+function ktOf(b) { return b >= 8 ? 2 : 1; }
 
-/* Ülesanne. o = {id, b, k, text, fig, given, find, steps, sol, ans, note} */
+window.KINDS = { T: 'Tunnis', K: 'Kodus', S: 'Sarnane', V: 'Variant' };
+
+/* Ülesanne. o = {id, b, k, text, fig, viz, given, find, steps, sol, ans, note, src}
+   uid on salvestuse ja lingi võti: KT1 ülesannetel sama mis id (vanad tulemused jäävad alles),
+   KT2 ülesannetel 'kt2-' + id, sest kogu II numbrid kattuvad kogu I numbritega. */
 function P(o) {
   if (!o.id) o.id = String(o.n);
   if (!o.n) o.n = o.id;
+  o.kt = ktOf(o.b);
+  o.uid = o.kt === 1 ? o.id : 'kt2-' + o.id;
+  if (o.src === undefined) o.src = o.kt === 1 ? 'I' : (parseInt(o.id, 10) >= 400 ? 'I' : 'II');
   window.PROBLEMS.push(o);
 }
 
@@ -160,8 +180,23 @@ const UNIT_SETS = {
   'p/s': [['p/s', 1]],
   'kg·m/s': [['kg·m/s', 1]],
   'm²': [['mm²', 1e-6], ['cm²', 1e-4], ['m²', 1]],
-  'N·s': [['N·s', 1]]
+  'N·s': [['N·s', 1]],
+  'm³': [['cm³', 1e-6], ['L', 1e-3], ['m³', 1]],
+  '1/m³': [['1/cm³', 1e6], ['1/m³', 1]],
+  'K': [['K', 1]],
+  'mol': [['mol', 1], ['kmol', 1e3]],
+  'kg/m³': [['g/cm³', 1e3], ['kg/m³', 1]],
+  'V': [['µV', 1e-6], ['mV', 1e-3], ['V', 1], ['kV', 1e3], ['MV', 1e6]],
+  'V/m': [['V/m', 1], ['kV/m', 1e3], ['MV/m', 1e6]],
+  'C': [['pC', 1e-12], ['nC', 1e-9], ['µC', 1e-6], ['mC', 1e-3], ['C', 1]],
+  'C/m²': [['nC/m²', 1e-9], ['µC/m²', 1e-6], ['C/m²', 1]],
+  'F': [['pF', 1e-12], ['nF', 1e-9], ['µF', 1e-6], ['mF', 1e-3], ['F', 1]],
+  'Ω': [['mΩ', 1e-3], ['Ω', 1], ['kΩ', 1e3], ['MΩ', 1e6]],
+  'A': [['µA', 1e-6], ['mA', 1e-3], ['A', 1], ['kA', 1e3]],
+  '%': [['%', 1]]
 };
+UNIT_SETS['m/s'].push(['Mm/s', 1e6]);
+UNIT_SETS['J'].unshift(['µJ', 1e-6]);
 
 function unitOptions(u) {
   return UNIT_SETS[u] || (u ? [[u, 1]] : []);

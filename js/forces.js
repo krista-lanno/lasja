@@ -31,7 +31,17 @@
     an: { l: 'aₙ', name: 'normaalkiirendus aₙ' },
     p1: { l: 'p₁', name: 'esimese killu impulss p₁' },
     p2: { l: 'p₂', name: 'teise killu impulss p₂' },
-    p3: { l: 'p₃', name: 'kolmanda killu impulss p₃' }
+    p3: { l: 'p₃', name: 'kolmanda killu impulss p₃' },
+    Fe: { l: 'Fₑ', name: 'elektriline jõud Fₑ' },
+    Fu: { l: 'Fü', name: 'üleslükkejõud Fü' },
+    F1: { l: 'F₁', name: 'laengu 1 jõud F₁' },
+    F2: { l: 'F₂', name: 'laengu 2 jõud F₂' },
+    F3: { l: 'F₃', name: 'laengu 3 jõud F₃' },
+    FQ: { l: 'F_Q', name: 'keskmise laengu Q jõud' },
+    E: { l: 'E', name: 'summaarne väljatugevus E' },
+    E1: { l: 'E₁', name: 'laengu 1 väljatugevus E₁' },
+    E2: { l: 'E₂', name: 'laengu 2 väljatugevus E₂' },
+    E3: { l: 'E₃', name: 'laengu 3 väljatugevus E₃' }
   };
   window.VEC = VEC;
 
